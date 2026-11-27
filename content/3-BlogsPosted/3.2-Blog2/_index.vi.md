@@ -1,31 +1,44 @@
 ---
-title: "Blog 2"
-date: 2024-01-01
-weight: 1
+title: "Blog 2 - Test luồng Serverless & Event-driven (SQS + DLQ + DynamoDB) trên local với LocalStack và Java 21"
+date: 2026-11-25
+weight: 2
 chapter: false
 pre: " <b> 3.2. </b> "
 ---
-{{% notice warning %}}
-⚠️ **Lưu ý:** Các thông tin dưới đây chỉ nhằm mục đích tham khảo, vui lòng **không sao chép nguyên văn** cho bài báo cáo của bạn kể cả warning này.
-{{% /notice %}}
 
-# SESSION POLICIES TRONG AMAZON EKS POD IDENTITY
+### Thông tin bài đăng
 
-Amazon EKS Pod Identity vừa bổ sung tính năng session policies, cho phép bạn thu hẹp quyền IAM một cách linh hoạt và chính xác cho từng pod mà không cần tạo thêm nhiều IAM roles riêng biệt. Đây là bước tiến quan trọng giúp áp dụng nguyên tắc least privilege hiệu quả hơn trong môi trường Kubernetes quy mô lớn.
+- **Tác giả:** Ngô Thị Kim Ngân (tên hiển thị Facebook: Ngô Thị Kim Ngân), thành viên trong nhóm.
+- **Ngày đăng:** 25/11/2026, lúc 21:28 theo ảnh bài đăng.
+- **Nơi đăng:** AWS Study Group VN trên Facebook.
+- **Bài gốc:** TBD — dán link bài đăng Facebook vào đây.
 
-Các điểm chính cần nắm:
+### Test luồng Serverless & Event-driven không tốn tiền trên local: LocalStack + Java 21
 
-* Session policy là một IAM policy inline được chỉ định khi tạo hoặc cập nhật Pod Identity association.
-* Quyền hiệu quả = intersection (giao) giữa permissions của IAM role và session policy → session policy chỉ có thể thu hẹp, không thể mở rộng quyền.
-* Giúp tránh tình trạng over-permissioning khi reuse chung một IAM role cho nhiều workloads có nhu cầu khác nhau.
-* Hỗ trợ cả same-account và cross-account (qua IAM role chaining).
-* Giảm đáng kể số lượng IAM roles cần quản lý, tránh chạm giới hạn quota IAM trong cluster lớn.
-* Cấu hình dễ dàng qua AWS Management Console, AWS CLI hoặc AWS SDK khi tạo association giữa Kubernetes ServiceAccount và IAM role.
+**Bài toán:** Một luồng bất đồng bộ nhận sự kiện, đưa vào Amazon SQS, rồi được xử lý bởi AWS Lambda Java 21 để ghi DynamoDB và đọc Amazon SSM Parameter Store, kèm SQS dead-letter queue (DLQ) cho trường hợp lỗi. Đẩy thẳng lên AWS để debug từng lỗi nhỏ vừa chậm vừa dễ phát sinh chi phí ngoài ý muốn. Backend của nhóm cũng dùng cách này: Docker với LocalStack để chạy local, sau đó dùng AWS SAM để triển khai.
 
-Tính năng này đặc biệt hữu ích khi bạn có nhiều ứng dụng chạy trên cùng một IAM role nhưng cần giới hạn quyền khác nhau (ví dụ: một pod chỉ đọc S3 bucket cụ thể, pod khác chỉ gọi một số API nhất định).
+{{< event-photo src="images/blogs/localstack/architecture.png" alt="Developer và script test gửi payload vào hàng đợi SQS chính trong LocalStack; Lambda handler Java 21 ghi DynamoDB và đọc SSM; lỗi chuyển vào DLQ; sau khi kiểm tra local, cùng thiết kế được triển khai bằng AWS SAM lên ap-southeast-1." caption="Kiến trúc trong bài: test local bằng LocalStack, sau đó triển khai lên AWS bằng AWS SAM." >}}
 
-...Hình ảnh...
+#### Cách làm Local-First
+Luồng được giả lập ngay trên máy bằng LocalStack: SQS, DLQ, DynamoDB và SSM. Cả luồng chạy đúng lẫn luồng lỗi đều được test trước khi build và triển khai bằng AWS SAM.
 
-...Link...
+#### Ba điểm thực tế
+- **Tách endpoint sạch trong Java 21 SDK v2.** Chỉ gọi `endpointOverride(URI.create(localEndpoint))` khi chạy chế độ `local` (`http://localhost:4566`). Lên cloud thì dùng endpoint mặc định. Trong sơ đồ đây là cờ `isLocal`: true ở local và false trên AWS.
+- **Test cả happy path lẫn DLQ.** Payload hợp lệ phải được ghi vào DynamoDB và bị xóa khỏi queue chính. Payload gây lỗi phải rơi vào DLQ sau số lần retry đã cấu hình.
+- **Lên cloud muộn hơn.** Chỉ deploy bằng AWS SAM khi logic và cấu hình đã ổn ở local, tránh vòng lặp sửa lỗi và deploy lại tốn kém trên môi trường thật.
 
-...Hướng dẫn...
+#### Điểm rút ra
+- DynamoDB trong luồng này còn lưu trạng thái và dữ liệu idempotency, nên một message xử lý hai lần không gây tác động trùng lặp.
+- Test local chứng minh logic và hành vi retry; lần kiểm tra cuối trên AWS vẫn cần để xác nhận quyền và quota thật.
+
+Bạn test luồng event-driven bằng LocalStack, SAM local hay test thẳng trên AWS?
+
+### Minh chứng bài đã đăng
+
+{{< event-photo src="images/blogs/localstack/facebook-publication.png" alt="Ảnh bài đăng của Ngô Thị Kim Ngân trong AWS Study Group VN, ngày 25 tháng 11 lúc 21:28." caption="Ảnh bài Blog 2 đã đăng trên AWS Study Group VN." >}}
+
+### Tài liệu tham khảo
+
+- [Tài liệu LocalStack](https://docs.localstack.cloud/)
+- [AWS Serverless Application Model (AWS SAM)](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html)
+- [Amazon SQS dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
