@@ -1,35 +1,25 @@
 ---
-title: "Self-Assessment"
-date: 2026-12-04
+title: "Self-evaluation"
+date: 2026-11-27
 weight: 6
 chapter: false
 pre: " <b> 6. </b> "
 ---
 
-During my internship at **Amazon Web Services Viet Nam Company Limited** (First Cloud AI Journey) from **14 September 2026** to **18 December 2026**, I had the opportunity to learn, practice, and apply the knowledge acquired in school to a real-world working environment.  
-I spent eight weeks learning core AWS services and four weeks on **AskFirst, a serverless Telegram assistant that helps older adults check suspicious messages**, through which I improved my skills in **AWS serverless services, Java backend development, infrastructure as code, CI/CD, security fundamentals, technical writing, and communication in English and Vietnamese**.  
+During the First Cloud AI Journey internship I was a backend member (BE) of the team project **Ask First**. I worked on the Java 21 side of the scam-check flow: the Telegram webhook handler (BE-22), the media guard that rejects oversized files before any job is created (BE-34), and the worker that groups messages and calls the AI Lambda. I am also working on the family alert (FR6), the 15-minute follow-up (FR9), and BE-29. The table below is my self-evaluation; the evidence comes from my worklog and the project repo.
 
-In terms of work ethic, I always strived to complete tasks well, complied with workplace regulations, and actively engaged with colleagues to improve work efficiency.
+| No. | Criterion | Good | Fair | Average | Comment / evidence |
+|---|---|---|---|---|---|
+| 1 | Professional knowledge | ✅ | | | Worked hands-on with Java 21 Lambdas (webhook handler and worker), SQS with a dead-letter queue, DynamoDB single-table design, AWS SAM, and a Docker + LocalStack environment for local runs. |
+| 2 | Self-learning | | ✅ | | Learned the AWS services during the eight learning weeks and applied them to the project; some topics, such as idempotent handlers and SQS retries, took extra time to absorb. |
+| 3 | Proactiveness | ✅ | | | Took on issues BE-22 (#43) and BE-34 (#72), then FR6 (#24) and FR9 (#27), and kept a handoff note for the worker so the work could be continued and reviewed. |
+| 4 | Discipline | | | ✅ | Work followed the issue priorities, but the worklog was not always kept daily, and I need to plan around dependencies earlier (BE-29 needs BE-28 and INT-01 first). |
+| 5 | Communication | | ✅ | | Worked mainly through GitHub issues and the shared BE ↔ AI contract; the Java side follows the contract and leaves the AI code and the contracts folder unchanged. I could report blockers to the team earlier. |
+| 6 | Teamwork | ✅ | | | BE-29 is a paired task with another backend member, and the agreed contract let the BE and AI sides build in parallel. |
+| 7 | Problem solving | | ✅ | | Designed the 3-second message buffer (BUFFER# META + MSG# by sequence), de-duplication of Telegram updates with a conditional write, and early rejection of oversized media so it never reaches the queue. |
+| 8 | Contribution to the Workshop | ✅ | | | The webhook, worker, family alert, and follow-up flow I worked on are described step by step in the Workshop. |
 
-To objectively reflect on my internship period, I would like to evaluate myself based on the following criteria:
-
-| No. | Criteria                            | Description                                                                                      | Good | Fair | Average |
-| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---- | ---- | ------- |
-| 1   | **Professional knowledge & skills** | Understanding of the field, applying knowledge in practice, proficiency with tools, work quality | ✅    | ☐    | ☐       |
-| 2   | **Ability to learn**                | Ability to absorb new knowledge and learn quickly                                                | ☐    | ✅    | ☐       |
-| 3   | **Proactiveness**                   | Taking initiative, seeking out tasks without waiting for instructions                            | ✅    | ☐    | ☐       |
-| 4   | **Sense of responsibility**         | Completing tasks on time and ensuring quality                                                    | ✅    | ☐    | ☐       |
-| 5   | **Discipline**                      | Adhering to schedules, rules, and work processes                                                 | ☐    | ☐    | ✅       |
-| 6   | **Progressive mindset**             | Willingness to receive feedback and improve oneself                                              | ☐    | ✅    | ☐       |
-| 7   | **Communication**                   | Presenting ideas and reporting work clearly                                                      | ☐    | ✅    | ☐       |
-| 8   | **Teamwork**                        | Working effectively with colleagues and participating in teams                                   | ✅    | ☐    | ☐       |
-| 9   | **Professional conduct**            | Respecting colleagues, partners, and the work environment                                        | ✅    | ☐    | ☐       |
-| 10  | **Problem-solving skills**          | Identifying problems, proposing solutions, and showing creativity                                | ☐    | ✅    | ☐       |
-| 11  | **Contribution to project/team**    | Work effectiveness, innovative ideas, recognition from the team                                  | ✅    | ☐    | ☐       |
-| 12  | **Overall**                         | General evaluation of the entire internship period                                               | ✅    | ☐    | ☐       |
-
-### Needs Improvement
-
-* Strengthen discipline and strictly comply with the rules and regulations of the company or any organization  
-* Improve problem-solving thinking  
-* Enhance communication skills in both daily interactions and professional contexts, including handling situations effectively
+### Areas to improve
+* **Keep the worklog daily.** Write it as I work instead of catching up later.
+* **Plan around dependencies.** Check what an issue needs first (for example BE-28 and INT-01 for BE-29) and raise a blocker early.
+* **Test as I build.** Write tests for boundary values and retry behavior alongside the code, not at the end.

@@ -1,40 +1,21 @@
 ---
 title: "Chia sẻ, đóng góp ý kiến"
-date: 2026-12-04
+date: 2026-11-27
 weight: 7
 chapter: false
 pre: " <b> 7. </b> "
 ---
->Tại đây bạn có thể tự do đóng góp ý kiến cá nhân về những trải nghiệm khi tham gia chương trình First Cloud AI Journey, giúp team FCAJ cải thiện những vấn đề còn thiếu sót dựa trên các hạng mục sau:
 
-### Đánh giá chung
+### Cảm nhận chung về chương trình
+First Cloud AI Journey cho tôi làm một dự án thật từ đầu đến cuối trên AWS thay vì chỉ làm lab rời rạc: từ proposal, kiến trúc serverless, CI/CD đến ý thức về chi phí và dọn tài nguyên. Làm việc theo nhóm với issue GitHub và contract dùng chung giữa phía backend và AI giúp tôi quen cách một team phần mềm vận hành. Trang rules của chương trình ghi rõ yêu cầu và barem chấm nên dễ tự kiểm tra bài của mình.
 
-**1. Môi trường làm việc**  
-Môi trường làm việc rất thân thiện và cởi mở. Các thành viên trong FCAJ luôn sẵn sàng hỗ trợ khi mình gặp khó khăn, kể cả ngoài giờ làm việc. Không gian làm việc gọn gàng, thoải mái, giúp mình tập trung tốt hơn. Tuy nhiên, mình nghĩ có thể bổ sung thêm một số buổi giao lưu hoặc team bonding để mọi người hiểu nhau hơn.
+### Mức độ hài lòng
+**[x]/5.** Tôi học được nhiều nhất ở phần biến thiết kế backend Java thành các thành phần serverless chạy thật trên AWS: webhook, hàng đợi, worker và retry. *(Hãy điền điểm của bạn và chỉnh lại lý do.)*
 
-**2. Sự hỗ trợ của mentor / team admin**  
-Mentor hướng dẫn rất chi tiết, giải thích rõ ràng khi mình chưa hiểu và luôn khuyến khích mình đặt câu hỏi. Team admin hỗ trợ các thủ tục, tài liệu và tạo điều kiện để mình làm việc thuận lợi. Mình đánh giá cao việc mentor cho phép mình thử và tự xử lý vấn đề thay vì chỉ đưa đáp án.
+### Điểm cần cải thiện
+* Rules được cập nhật ngày 21–24/11 (Step-by-step Lab Guide trở thành bắt buộc) trong khi hạn nộp là 30/11, nên các nhóm có ít thời gian điều chỉnh. Mong chương trình chốt yêu cầu sớm hơn hoặc thông báo thay đổi kèm thời gian chuyển tiếp.
+* Việc xin quyền truy cập model Bedrock và tài khoản AWS cho nhóm mất thời gian ở giai đoạn đầu; nếu có hướng dẫn hoặc tài khoản sẵn sàng từ tuần đầu thì các nhóm sẽ đỡ trễ.
+* Nên có thêm ví dụ workshop mẫu cho dự án nhiều dịch vụ (không chỉ lab một dịch vụ) để intern dễ hình dung mức độ chi tiết cần viết.
 
-**3. Sự phù hợp giữa công việc và chuyên ngành học**  
-Công việc mình được giao phù hợp với kiến thức mình đã học ở trường, đồng thời mở rộng thêm những mảng mới mà mình chưa từng được tiếp cận. Nhờ vậy, mình vừa củng cố kiến thức nền tảng, vừa học thêm kỹ năng thực tế.
-
-**4. Cơ hội học hỏi & phát triển kỹ năng**  
-Trong quá trình thực tập, mình học được nhiều kỹ năng mới như sử dụng công cụ quản lý dự án, kỹ năng làm việc nhóm, và cả cách giao tiếp chuyên nghiệp trong môi trường công ty. Mentor cũng chia sẻ nhiều kinh nghiệm thực tế giúp mình định hướng tốt hơn cho sự nghiệp.
-
-**5. Văn hóa & tinh thần đồng đội**  
-Văn hóa công ty rất tích cực: mọi người tôn trọng lẫn nhau, làm việc nghiêm túc nhưng vẫn vui vẻ. Khi có dự án gấp, mọi người cùng nhau cố gắng, hỗ trợ không phân biệt vị trí. Điều này giúp mình cảm thấy mình là một phần của tập thể, dù chỉ là thực tập sinh.
-
-**6. Chính sách / phúc lợi cho thực tập sinh**  
-Công ty có hỗ trợ phụ cấp thực tập và tạo điều kiện về thời gian linh hoạt khi cần thiết. Ngoài ra, việc được tham gia các buổi đào tạo nội bộ là một điểm cộng lớn.
-
-
-### Một số câu hỏi khác
-- Điều bạn **hài lòng nhất** trong thời gian thực tập?  
-- Điều bạn nghĩ công ty **cần cải thiện** cho các thực tập sinh sau?  
-- Nếu giới thiệu cho bạn bè, bạn có **khuyên họ thực tập ở đây không**? Vì sao?  
-
-
-### Đề xuất & mong muốn
-- Bạn có đề xuất gì để cải thiện trải nghiệm trong kỳ thực tập?  
-- Bạn có muốn tiếp tục chương trình này trong tương lai?
-- Góp ý khác (tự do chia sẻ):
+### Có giới thiệu cho bạn bè không? Vì sao?
+**Có.** Chương trình phù hợp với bạn nào muốn học cloud và AI bằng cách làm dự án thật, có quy trình làm việc nhóm và có cơ hội dùng dịch vụ AWS mà tự học khó tiếp cận. Tôi sẽ nhắc các bạn chuẩn bị thời gian khá nhiều vì khối lượng việc không nhỏ.

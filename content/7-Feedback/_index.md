@@ -1,43 +1,21 @@
 ---
 title: "Sharing and Feedback"
-date: 2026-12-04
+date: 2026-11-27
 weight: 7
 chapter: false
 pre: " <b> 7. </b> "
 ---
 
-> Here, you can freely share your personal opinions about your experience participating in the First Cloud AI Journey program. This will help the FCAJ team improve any shortcomings based on the following aspects:
+### Overall impressions of the program
+First Cloud AI Journey let me build a real project end to end on AWS instead of isolated labs: proposal, serverless architecture, CI/CD, cost awareness and clean-up. Working as a team with GitHub issues and a shared contract between the backend and AI sides got me used to how a software team operates. The program's rules site states the requirements and the scoring clearly, so it is easy to check my own work against it.
 
-### Overall Evaluation
+### Satisfaction
+**[x]/5.** I learned the most from turning a Java backend design into working serverless pieces on AWS: webhook, queue, worker, and retries. *(Fill in your own score and adjust the reason.)*
 
-**1. Working Environment**  
-The working environment is very friendly and open. FCAJ members are always willing to help whenever I encounter difficulties, even outside working hours. The workspace is tidy and comfortable, helping me focus better. However, I think it would be nice to have more social gatherings or team bonding activities to strengthen relationships.
+### What could be improved
+* The rules were updated on 21–24/11 (the Step-by-step Lab Guide became mandatory) while the deadline is 30/11, leaving teams little time to adjust. Fixing requirements earlier, or announcing changes with a transition period, would help.
+* Getting Bedrock model access and a team AWS account took time early on; a guide or ready accounts from week one would help teams avoid delays.
+* A sample workshop for a multi-service project (not only a single-service lab) would show interns how much detail is expected.
 
-**2. Support from Mentor / Team Admin**  
-The mentor provides very detailed guidance, explains clearly when I don’t understand, and always encourages me to ask questions. The admin team supports administrative tasks, provides necessary documents, and creates favorable conditions for me to work effectively. I especially appreciate that the mentor allows me to try and solve problems myself instead of just giving the answer.
-
-**3. Relevance of Work to Academic Major**  
-The tasks I was assigned align well with the knowledge I learned at university, while also introducing me to new areas I had never encountered before. This allowed me to both strengthen my foundational knowledge and gain practical skills.
-
-**4. Learning & Skill Development Opportunities**  
-During the internship, I learned many new skills such as using project management tools, teamwork skills, and professional communication in a corporate environment. The mentor also shared valuable real-world experiences that helped me better plan my career path.
-
-**5. Company Culture & Team Spirit**  
-The company culture is very positive: everyone respects each other, works seriously but still keeps things enjoyable. When there are urgent projects, everyone works together and supports one another regardless of their position. This made me feel like a real part of the team, even as an intern.
-
-**6. Internship Policies / Benefits**  
-The company provides an internship allowance and offers flexible working hours when needed. In addition, having the opportunity to join internal training sessions is a big plus.
-
----
-
-### Additional Questions
-- What did you find **most satisfying** during your internship?  
-- What do you think the company **should improve** for future interns?  
-- If recommending to a friend, would you **suggest they intern here**? Why or why not?  
-
----
-
-### Suggestions & Expectations
-- Do you have any suggestions to improve the internship experience?  
-- Would you like to continue this program in the future?  
-- Any other comments (free sharing):
+### Would I recommend it to friends? Why?
+**Yes.** It suits anyone who wants to learn cloud and AI by building a real project, with a team workflow and access to AWS services that are hard to try on your own. I would tell them to plan for a significant time commitment.
