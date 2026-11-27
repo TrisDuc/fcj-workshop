@@ -1,4 +1,4 @@
-baseURL = "https://trisd.loc.cc/YOUR-REPO/"
+baseURL = "https://trisduc.github.io/fcj-workshop/"
 relativeURLs = false
 canonifyURLs = false
 defaultContentLanguage = "en"

@@ -1,140 +1,198 @@
 ---
 title: "Proposal"
-date: 2026-11-02
+date: 2026-11-25
 weight: 2
 chapter: false
 pre: " <b> 2. </b> "
 ---
-{{% notice info %}}
-**Draft note:** Figures marked as estimates are planning values. Verify prices and quotas in the AWS Pricing Calculator and the service pages before final submission.
+
+# Ask First ("Hỏi Trước")
+## A serverless Telegram assistant that helps elderly people check suspected scam messages before they act
+
+### 1. Overview
+
+**Ask First** is a Telegram bot for elderly people in Vietnam. When they receive a suspicious message, link or screenshot, they forward it to the bot. The bot answers in plain Vietnamese with:
+
+- one of **4 risk levels**: `DANGEROUS`, `SUSPICIOUS`, `UNSURE`, `LOW_RISK` (there is deliberately no "safe" level),
+- the scam scenario it resembles, the warning signs quoted from the message itself, what to do right now, and a verified official hotline,
+- an optional **alert to a family member** who was linked with the elderly person's explicit consent, when the risk is high.
+
+The bot plays the role of the "third person" who steps in before the money leaves the account. It runs fully serverless on AWS: Java 21 Lambdas handle Telegram and orchestration, a Python 3.12 Lambda runs the AI pipeline (local OCR, rules, local RAG), and only the final "judge" step calls an open-weight LLM on Amazon Bedrock with **text that has already been masked**.
+
+| Item | Value |
+|---|---|
+| Team | 4 people: 2 backend (Java 21), 2 AI (Python 3.12) |
+| Timeframe | 6 weeks, 19/10/2026 – 29/11/2026 (FCAJ bootcamp) |
+| Regions | Compute in `ap-southeast-1` (Singapore); Bedrock in `ap-southeast-2` (Sydney) |
+| Channel | Telegram Bot API (webhook) |
+| Estimated cost | ≈ 6.2 USD/month for 3,000 checks without Free Tier, ≈ 2.4 USD/month with always-free tiers (section 6) |
+
+### 2. Problem statement
+
+**Online scams are large-scale in Vietnam, and elderly people are a main target.**
+
+- The Ministry of Public Security estimated losses from online fraud in 2025 at more than 8,000 billion VND ([VOV](https://vov.vn/phap-luat/thiet-hai-tu-lua-dao-truc-tuyen-len-toi-8000-ty-dong-trong-nam-2025-post1286479.vov)).
+- In the 2025 survey of the National Cybersecurity Association (NCA), impersonating the police was the most common scam type, and only 32.12% of victims reported to the authorities ([Báo Hải Phòng](https://baohaiphong.vn/cac-hinh-thuc-lua-dao-truc-tuyen-nao-pho-bien-nhat-nam-2025-532711.html), [Công Lý](https://doanhnhan.congly.vn/lua-dao-truc-tuyen-nam-2025-gay-thiet-hai-tren-6-000-ty-dong.html)).
+- Thai Nguyen police reported that victims of the "fake police officer" scenario are "mainly elderly people and people in remote areas" ([Bộ Công an](https://www.bocongan.gov.vn/bai-viet/kip-thoi-ngan-chan-vu-viec-gia-danh-luc-luong-cong-an-lua-dao-chiem-doat-tai-san-1782987242)).
+
+**The gap.** Banks already warn at transfer time, but the decisive manipulation happens earlier: scammers isolate the victim ("do not talk to anyone"). In the cases where a scam was stopped, a third person (bank teller, post office staff, local police) stepped in before the transfer. Elderly people have no simple tool to **forward a screenshot or link and get an explanation they understand**, and their children are often not there.
+
+**Target users**
+
+| User | Need |
+|---|---|
+| Elderly person (primary) | Forward / screenshot / paste a suspicious message, get a short, clear answer within seconds, no app to install |
+| Family member (secondary) | Be alerted when a linked elderly relative receives a high-risk message, with one "I have contacted them" button |
+
+### 3. Goals and scope
+
+**Success criteria** (set before building; source: architecture doc §1.3, plan §4):
+
+| Criterion | Target |
+|---|---|
+| Scam recall | ≥ 90% |
+| False positives on "benign but suspicious-looking" messages | ≤ 10% |
+| End-to-end latency (warm) | p95 ≤ 15 s for text and images |
+| Cost | ≤ 0.005 USD per check; ≤ 50 USD/month at demo scale |
+| Privacy | Images stay in the `ai` Lambda's memory; the LLM only sees masked text; logs contain no message content; all user data has a TTL |
+
+**In scope (MVP, 6 weeks)**
+
+- Text, links (including links hidden behind text), screenshots and albums, forwarded messages; several messages sent in a row are grouped into one answer.
+- 4-level verdict with scenario, signs, actions, official hotline and a citation from official warnings (RAG).
+- Onboarding with explicit consent, withdraw consent, delete data.
+- Family linking (double opt-in), family alerts, 15-minute reminder, "I have contacted them" acknowledgement.
+- In-chat management: `/nguoithan`, `/lichsu`, `/rutdongy`, `/xoadulieu`, `/caidat`; "first 30 minutes" checklist after being scammed (`/bilua`).
+- "Bot was wrong" feedback button; kill switch to fall back to rules-only without redeploying; unsupported input handling (video, sticker, `.apk`...).
+
+**Cut from the original plan to fit 6 weeks** (plan v3, 19/10/2026 – the original plan was 12 weeks):
+
+| Cut / postponed | Why |
+|---|---|
+| Voice notes and local speech recognition (ASR) | Time; the bot replies "voice is not supported yet" |
+| VLM fallback for hard images | Time; local OCR passed its gate (section 4) |
+| Multi-turn follow-up questions | Time |
+| Telegram Mini App (web UI) | Everything is done in chat with commands and inline buttons instead |
+| Phase 2: live knowledge base, "trending scams" page | Out of the 6-week window |
+| Pilot with 10–20 households | Replaced by internal testing with the team and their families; **no real-user metrics outside the team** |
+
+**Out of scope by design:** blocking calls or transfers, a public blacklist of phone numbers or accounts, real-time deepfake video detection, sending SMS, recording calls.
+
+### 4. Solution architecture
+
+![Ask First architecture on AWS (MVP)](/images/5-Workshop/architecture.png)
+
+**Design principles**
+
+1. **Serverless, event-driven, no VPC and no NAT** – small, uneven load; pay per request; avoids a fixed NAT cost of about 32 USD/month.
+2. **Hybrid local-first AI** – OCR, PII masking, rules and embeddings run on CPU inside Lambda. Only the judge step calls Bedrock, and only with masked text.
+3. **Controlled workflow, not an agent** – `Normalize → Extract → Mask PII → Signals (rules + URL) → Retrieve (RAG) → Guard → Judge → Fuse → Respond`. The rules layer works without the LLM, so the bot always answers.
+4. **Store no original content** – only verdict, signal codes and hashes, with a 30-day TTL.
+
+**AWS services and why each was chosen**
+
+| Service | Role | Why this service |
+|---|---|---|
+| **AWS Lambda** – `webhook`, `worker`, `worker-dlq` (Java 21, zip) | Receive Telegram updates via **Function URL**, orchestrate checks, send replies and family alerts | Pay per invocation; Function URL gives an HTTPS endpoint without API Gateway |
+| **AWS Lambda** – `ai` (Python 3.12, container image, 3008 MB) | Whole AI pipeline with local models (OCR, embeddings) | Container image fits ML libraries beyond the 250 MB zip limit; images are processed in memory only |
+| **Amazon SQS** + DLQ | Queue between `webhook` and `worker` | Webhook returns 200 immediately; caps concurrency to protect Bedrock quota; free retries; `DelaySeconds` implements message grouping (3 s) and the 15-minute reminder without a scheduler |
+| **Amazon DynamoDB** (on-demand, single table) | Users, consent, family links, check metadata, dedup, cache, rate limit, feature flags | Key-value access, **TTL** for data minimisation, conditional writes for idempotency, PITR enabled |
+| **Amazon Bedrock** – Qwen3 32B (judge), gpt-oss-120b (backup) | Structured classification of masked text | Serverless, pay per token, no GPU to run. Open-weight models are available in-region in Sydney, not in Singapore |
+| **Amazon Bedrock Guardrails** | `PROMPT_ATTACK` filter on input | Detects prompt injection inside the forwarded message |
+| **Amazon S3** | Local model weights, RAG index, eval sets, voluntarily donated samples (`donated/` expires after 30 days) | Cheap; swap models without rebuilding the image; Block Public Access + SSE |
+| **Amazon ECR** | Stores the `ai` container image | Required for image-based Lambda |
+| **SSM Parameter Store** (SecureString) | Bot token, webhook secret, stack config | No secrets in code or Lambda environment variables |
+| **CloudWatch** + **SNS** | Logs (JSON, shared `trace_id`), DLQ alarm → email to the team | Alarm needs a target; SNS is used only for internal alarms |
+| **IAM** + GitHub Actions **OIDC** | Least-privilege roles (the `ai` role may only touch `CACHE#` / `URL#` keys); CI/CD without stored access keys | Security by default |
+
+**Deliberately not used:** API Gateway (Function URL is enough), Step Functions (linear pipeline under 30 s), OpenSearch / vector DB (small corpus, cosine in memory, RAG p95 45 ms on Lambda), EC2/SageMaker GPU (far more expensive than per-token Bedrock at this scale), Amazon Transcribe (voice postponed), Textract, Bedrock Agents, VPC/NAT.
+
+**Main data flow** (summary; the diagram numbers 17 detailed steps)
+
+1. The elderly person forwards a message; Telegram POSTs the update to the `webhook` Function URL with a `secret_token` (checked in constant time).
+2. `webhook` deduplicates the `update_id`, checks consent, buffers the message (`BUFFER#`), sends "⏳ checking…", and puts a job on SQS with a 3 s delay. It answers Telegram in under 1 s.
+3. `worker` reads the buffer and the kill-switch flags, then invokes `ai` synchronously with `op=analyze` (metadata and `file_id` only, never image bytes).
+4. `ai` downloads the image straight into memory, runs OCR and local models, masks phone numbers, account numbers, ID numbers, OTPs and emails, applies rules and URL checks, and retrieves scenario cards (RAG).
+5. `ai` calls Bedrock Guardrails, then the judge (Qwen3 32B; gpt-oss-120b on low confidence or error), fuses rule and LLM scores into a level, and renders the Vietnamese answer from a template.
+6. If the level is `DANGEROUS` with a risky action, `worker` alerts all linked family members in parallel; the "already alerted" state is recorded only after Telegram returns a `message_id`.
+7. `worker` edits the "⏳" message into the final answer and writes `CHECK#` metadata (TTL 30 days); a 15-minute reminder is scheduled if no family member acknowledged.
+8. A job that fails 5 times goes to the DLQ: `worker-dlq` tells the user the bot is busy, and the CloudWatch alarm on the DLQ emails the team through SNS.
+
+{{% notice note %}}
+Configuration details of the deployed `dev` stack (`infra/template.yaml`): SQS maximum concurrency is **5** for `worker` and **2** for `worker-dlq`; SnapStart is a parameter that is **off by default** until cold starts are measured (ADR-008); the OCR model is RapidOCR PP-OCRv6 small. VietOCR was enabled next to RapidOCR on 24/11/2026.
 {{% /notice %}}
 
-# AskFirst — "Ask Before You Transfer"
-## A Serverless Telegram Assistant on AWS That Helps Older Adults Check Suspicious Messages
+### 5. Plan and timeline
 
-### 1. Executive Summary
-AskFirst is a Telegram assistant for older adults and their families. Before transferring money, a user forwards a suspicious message, screenshot, or link to the bot. AskFirst reads the content, masks personal data, compares it with known scam patterns, asks a language model on Amazon Bedrock to assess the risk, and replies in simple Vietnamese. For high-risk cases, and only with consent, it can also alert a family member.
+Six one-week sprints, three parallel tracks (backend, AI, shared) joined by a JSON Schema contract between Java and Python.
 
-The system is fully serverless. Two Java 21 Lambda functions handle the Telegram webhook and the processing queue, a Python Lambda runs the AI pipeline, and Amazon SQS, Amazon DynamoDB, and Amazon S3 provide queuing, storage, and model hosting. The core stack runs in ap-southeast-1 (Singapore); the language model and guardrails are called in ap-southeast-2 (Sydney).
+| Week | Milestone / gate | Content | Status (from repo docs) |
+|---|---|---|---|
+| W1 (19–25/10) | **G0** Contract | BE↔AI JSON Schema, fixtures, contract tests in CI | Done: contract merged 23/10 ([#89](https://github.com/ask-first-fcaj/ask-first/pull/89)), BE approved and G0 closed 28/10 ([#2](https://github.com/ask-first-fcaj/ask-first/issues/2)); Java-side contract test added to CI 11/11 ([#104](https://github.com/ask-first-fcaj/ask-first/pull/104)) |
+| W2 (26/10–01/11) | **G1** LLM choice · **G2** OCR choice | Benchmark judge models; compare OCR stacks on 50 real screenshots | G2 passed 30/10 (RapidOCR, URL 94%). G1 closed 11/11, later than planned (Qwen3 32B, ADR-002) |
+| W3 (02–08/11) | **M1** Text end-to-end | Forwarded text → real verdict (rules + Qwen3) | Missed the date: text pipeline code done 03/11, first real Bedrock call 11/11 ([#132](https://github.com/ask-first-fcaj/ask-first/pull/132)), `ai` Lambda wired to AWS 23/11 ([#173](https://github.com/ask-first-fcaj/ask-first/pull/173)), INT-01 closed 25/11 ([#56](https://github.com/ask-first-fcaj/ask-first/issues/56)) |
+| W4 (09–15/11) | **M2** Images + family | Screenshot → local OCR → verdict; family alert | Image path measured on Lambda 25/11 (see section 7) |
+| W5 (16–22/11) | **M3** RAG · **M4** MVP freeze | Citations from official warnings; eval gate | M4 eval report 17/11; RAG p95 45 ms on Lambda |
+| W6 (23–29/11) | **M5** internal test · **M6** presentation · **M7** workshop submission | Team and family testing, cost estimate, final eval, clean-up guide | Final eval 24/11, cost estimate 24/11 |
 
-### 2. Problem Statement
-#### What's the Problem?
-Online fraud in Vietnam increasingly targets older adults through impersonation, fake investment offers, and malicious links. Victims often decide within minutes, alone, and under pressure. Existing protections (bank warnings, public awareness campaigns) arrive too late or are not available at the moment of decision. Older adults also tend to avoid installing new apps.
+After M4, only bug fixes, prompt/threshold tuning (through the eval gate) and infrastructure work were allowed.
 
-#### The Solution
-AskFirst meets people where they already communicate: Telegram. The user sends the suspicious content to the bot and receives a clear verdict (low, medium, or high risk), the reasons, and a recommended next step. Processing follows this path:
+### 6. Budget estimation
 
-1. A webhook Lambda authenticates Telegram requests, removes duplicate updates, rejects oversized media, and buffers messages.
-2. Amazon SQS queues analysis jobs; failed jobs are retried up to five times and then moved to a dead-letter queue.
-3. A worker Lambda groups a user's messages in a short window and calls the AI Lambda.
-4. The AI Lambda extracts text (including OCR on images), masks personal data, retrieves similar scam knowledge, and asks Amazon Bedrock for an evaluation, with Bedrock Guardrails applied.
-5. The worker returns the result to the user, stores it in DynamoDB, alerts family members when appropriate, and schedules a follow-up question after 15 minutes.
+Load assumption: **3,000 checks/month**, text and images, no voice. Non-Bedrock services were priced with the **[AWS Pricing Calculator](https://calculator.aws/#/estimate?id=073f413f6ac370de48bf3bff0ba10a7b870ae807)** (created 24/11/2026, `ap-southeast-1`, "Without Free Tier"). Bedrock was calculated by hand because the Calculator does not offer Qwen3 in Sydney; token counts were measured on the real pipeline.
 
-#### Benefits and Return on Investment
-- **Protection at the moment of decision:** a check takes seconds and needs no new app.
-- **Privacy by design:** personal data is masked before leaving the AI Lambda, and uploaded images are kept in memory only.
-- **Low cost at pilot scale:** pay-per-use services mean cost grows with usage; the estimate in section 6 is designed to stay small.
-- **Reusable foundation:** the same pipeline can later serve other channels or additional scam knowledge sources.
+| Service | Basis | Without Free Tier (USD/month) | With always-free tiers (USD/month) |
+|---|---|---|---|
+| Bedrock LLM (Qwen3 32B + gpt-oss-120b backup) | 2,250 LLM calls × 0.000792 USD (measured, includes escalation) | 1.78 | 1.78 |
+| Bedrock Guardrails | 2,250 × 0.15 USD / 1,000 text units | 0.34 | 0.34 |
+| Lambda `ai` (3008 MB) | Calculator | 0.73 | 0 |
+| Lambda `worker` (512 MB) | Calculator | 0.13 | 0 |
+| Lambda `webhook` (512 MB) | Calculator | 0.03 | 0 |
+| SQS (jobs + DLQ) | Calculator | 0.28 | 0 |
+| DynamoDB on-demand | Calculator | 0.29 | < 0.05 |
+| S3 | Calculator | 0.03 | 0.03 |
+| ECR (`ai` image) | Calculator | 0.20 | 0.20 |
+| CloudWatch (logs, metrics, alarms, dashboard) | Calculator | 2.35 | 0 |
+| SNS (alarm email), SSM Parameter Store (standard) | Not entered | ≈ 0 | 0 |
+| **Total** | | **≈ 6.16** | **≈ 2.4** |
 
-### 3. Solution Architecture
-The architecture below shows the 17-step flow from the user's message to the result, together with security, monitoring, and CI/CD components.
+- Calculator total without Bedrock: 4.04 USD/month (48.48 USD per 12 months, 0 USD upfront).
+- Per check, LLM tokens only: ≈ 0.000792 USD (≈ 20 VND), well under the 0.005 USD target.
+- The 2,250 LLM calls assume 25% of checks are answered by the rules fast path or cache. This ratio is **not verified**: the eval set is almost all scams and hard cases. If every check calls the LLM, Bedrock is ≈ 2.7 USD/month.
 
-![AskFirst Architecture](/images/2-Proposal/askfirst-architecture.png)
+**Checked against real numbers** (25/11/2026, team dev account, free APIs only)
 
-#### AWS Services Used
-| Service | Role in AskFirst |
-| --- | --- |
-| AWS Lambda (Java 21) — webhook | Receives Telegram webhooks, validates the secret, de-duplicates updates, guards media size, buffers messages |
-| Amazon SQS + DLQ | Queues analysis jobs; retries failed jobs up to 5 times, then moves them to a dead-letter queue |
-| AWS Lambda (Java 21) — worker | Polls the queue, groups messages, calls the AI Lambda, sends results and alerts |
-| AWS Lambda (Python, container) — AI | OCR, personal-data masking, retrieval, and risk evaluation |
-| Amazon ECR | Stores the AI Lambda container image |
-| Amazon S3 | Stores model weights and the knowledge-base index |
-| Amazon DynamoDB (single table) | Message buffer, sessions, check results, flags, alerts, and cache |
-| Amazon Bedrock (Sydney) | Language model for risk evaluation |
-| Amazon Bedrock Guardrails (Sydney) | Safety and sensitive-content controls on model input and output |
-| AWS IAM, SSM Parameter Store, AWS KMS | Least-privilege access, bot-token storage, encryption |
-| GitHub Actions with OIDC | CI/CD without long-lived AWS keys |
-| Amazon CloudWatch, AWS CloudTrail, AWS Budgets, Amazon SNS | Logs, metrics, alarms, audit, cost alerts, and email notification to the team |
+- **Free Tier:** the account still gets the always-free tiers. November up to 25/11: Lambda ≈ 8,200/400,000 GB-seconds and 273/1M requests, SQS ≈ 178,000/1M requests, CloudWatch alarms 0.37/10. The "With always-free" column holds for this account.
+- **Lambda durations** (CloudWatch `Duration`, 14 days, team test traffic): `ai` 248 invocations, avg 2.7 s, p95 9.7 s; `worker` 73, avg 4.6 s, p95 14.2 s; `webhook` 50, avg 1.0 s, p95 3.0 s. `ai` and `worker` fit within the 5 s entered in the Calculator. `webhook` runs twice the assumed 0.5 s, so that line becomes about 0.06 USD without Free Tier; the total barely moves. Small sample of test traffic, not real load.
+- **Actual spend, dev account:** AWS Budgets shows ≈ 0.09 USD for November up to 25/11, forecast ≈ 0.10 USD for the month (Bedrock not included).
+- **Actual spend, Bedrock account** (Cost Explorer, 01–25/11): **3.93 USD** in total, of which 3.57 USD is Bedrock and 0.36 USD is tax (≈ 10%).
+  - Qwen3 32B: 11.8M input tokens, 0.94M output tokens = 2.40 USD.
+  - gpt-oss-120b (fallback): 2.5M input tokens, 0.44M output tokens = 0.66 USD.
+  - Guardrails: 3,266 text units billed as `ContentPolicyUnitsConsumed` (0.15 USD per 1,000 units) = 0.49 USD. The estimate uses this same price line.
+  - Gemma 3 12B (G1 benchmark): 0.02 USD.
+  - Most of these calls are the team's eval and test runs, not real users.
+- **Tax:** the bill adds ≈ 10% tax that the estimate above does not include (the Pricing Calculator does not include tax either).
 
-#### Component Design
-- **Channel:** Telegram bot for the older adult and for family members.
-- **Ingestion:** the webhook Lambda answers quickly; heavy work is deferred to the queue.
-- **Processing:** the worker coordinates; the AI Lambda performs analysis; external lookups (domain registration data and web-safety checks) provide additional evidence.
-- **Storage:** one DynamoDB table with access-pattern-driven keys; S3 holds models and the knowledge-base index only.
-- **Safety:** consent before any family alert; personal data masked; guardrails on model calls.
-- **Operations:** structured logs, alarms on queue depth and errors, budget alerts, and audit trail.
+**Cost optimisation**
 
-### 4. Technical Implementation
-**Implementation Phases**
-1. **Requirements and architecture (week 9):** problem definition, SRS, Region choice, repository and CI, DynamoDB model, SQS with DLQ.
-2. **Webhook and worker (week 10):** Java 21 Lambdas, buffering, job types, retries, first dev deployment.
-3. **AI pipeline and integration (week 11):** container image, models in S3, Bedrock and Guardrails, URL checks, cache, alerts, follow-up.
-4. **Security, operations, and testing (week 12):** IAM, SSM, KMS, OIDC deployment, monitoring, end-to-end tests, cleanup.
+1. **No VPC/NAT, no API Gateway, no OpenSearch, no GPU** – avoids every fixed monthly cost; the bill scales with use.
+2. **Local-first AI** – OCR, embeddings and rules run inside Lambda at no per-token cost; only the judge calls Bedrock with a cheap open-weight model.
+3. **Fast path and cache** – each check that skips the LLM saves ≈ 0.00094 USD (tokens + Guardrails).
+4. **Kill switch** (`CONFIG#global/FLAGS`) – turns off the LLM judge or image intake without a redeploy if a cost alarm fires or the bot is spammed; per-user rate limit caps abuse.
+5. **Free Tier** – Lambda, SQS and CloudWatch fit in the always-free tiers at this load (6.2 → 2.4 USD).
+6. **Retention and lifecycle** – S3 `donated/` already expires after 30 days. Recommended next: log retention of 7 days (the template does not set `RetentionInDays` yet) and a lifecycle policy on the `askfirst-dev-ai` ECR repository the team actually uses. `infra/github-oidc.yaml` already keeps the 5 latest images, but only for the `askfirst-ai` repository; the dev repository has no policy (checked 25/11/2026).
 
-**Technical Requirements**
-- Java 21, Maven, AWS SAM CLI, Docker (and LocalStack for local runs), Python 3.x for the AI Lambda, and a GitHub repository with Actions.
-- An AWS account with permission to create the resources above, and model access enabled in ap-southeast-2 for the chosen Bedrock model.
-- A Telegram bot token created through BotFather.
+### 7. Risks and mitigations
 
-### 5. Timeline & Milestones
-| Weeks | Milestone |
-| --- | --- |
-| 1–8 | Learning phase: AWS foundations, operations, security, messaging, containers, CI/CD, and serverless patterns |
-| 9 | Requirements, architecture, repository, SAM stack, DynamoDB model, SQS and DLQ |
-| 10 | Webhook and worker Lambdas deployed to the dev stack |
-| 11 | AI Lambda integrated end to end, with follow-up and family alerts |
-| 12 | Hardening, monitoring, end-to-end tests, cleanup, final report |
-
-### 6. Budget Estimation
-{{% notice warning %}}
-These numbers are **planning estimates** under stated assumptions, not quotes. Rebuild them in the [AWS Pricing Calculator](https://calculator.aws/) with current prices, and confirm the Bedrock model's availability and price in Sydney.
-{{% /notice %}}
-
-**Assumptions (pilot):** about 300 users, 3,000 checks per month, roughly 1,500 input tokens and 400 output tokens per check, and AI Lambda runs of about 20 seconds with 3 GB of memory.
-
-| Item | Cost driver | Estimate |
-| --- | --- | --- |
-| AWS Lambda (3 functions) | Requests and GB-seconds | Likely within free tier at pilot scale |
-| Amazon SQS | Requests | Negligible |
-| Amazon DynamoDB (on-demand) | Reads/writes, small storage | Under about 1 USD |
-| Amazon S3 | A few GB of models and index | Under about 1 USD |
-| Amazon ECR | Container image storage | Under about 1 USD |
-| Amazon Bedrock | About 4.5M input and 1.2M output tokens per month | TBD — multiply by the current per-million-token price for the chosen model |
-| Bedrock Guardrails | Text units processed | TBD — check current guardrail pricing |
-| AWS KMS | Customer-managed keys | About 1 USD per key per month |
-| CloudWatch Logs and alarms | Ingested logs, alarms | About 1–3 USD |
-| SNS, CloudTrail (management events), Budgets | Mostly free at this scale | Negligible |
-
-**Overall target:** keep the pilot within a single-digit USD monthly budget, excluding the model cost until the Bedrock price is confirmed. AWS Budgets alerts are configured to catch any deviation early.
-
-### 7. Risk Assessment
-#### Risk Matrix
-| Risk | Impact | Probability |
-| --- | --- | --- |
-| Incorrect verdict (false negative or false positive) | High | Medium |
-| Leakage of personal data | High | Low |
-| Bedrock cross-Region latency or throttling | Medium | Medium |
-| Cold start of the AI Lambda | Medium | High |
-| Cost overrun from unexpected traffic | Medium | Low |
-| Telegram API or external lookup unavailable | Medium | Medium |
-
-#### Mitigation Strategies
-- **Verdict quality:** ground the model with retrieved scam knowledge, return risk levels with reasons, and always advise confirming with family or the bank.
-- **Privacy:** mask personal data before model calls, keep images in memory only, record consent, and apply guardrails.
-- **Latency:** set timeouts, retry with backoff, and cache repeated URL checks.
-- **Cold start:** keep the container lean and load models once per execution environment.
-- **Cost:** budget alerts, log retention limits, and media-size limits before any job is queued.
-- **Dependencies:** treat external lookups as optional evidence and degrade gracefully.
-
-#### Contingency Plans
-- Replay messages from the dead-letter queue after fixing a defect.
-- Disable the Telegram webhook to stop traffic immediately if abuse or cost spikes occur.
-- Roll back by redeploying the previous version of the stack.
-
-### 8. Expected Outcomes
-#### Technical Improvements
-A working, documented, serverless pipeline from Telegram message to risk verdict, deployed with keyless CI/CD and monitored with alarms and budgets.
-
-#### Long-term Value
-A reusable anti-fraud foundation that can be extended with more scam knowledge, more channels, and agent-style capabilities as the project grows.
+| Risk | Impact | Mitigation | Current status |
+|---|---|---|---|
+| Missed scam (false negative) | Elderly person loses money | Rules floor independent of the LLM; no "safe" level; recall gate ≥ 90% before any prompt/model change | Final eval: recall 100% on 90 scam samples (3 runs) |
+| False alarm on legitimate messages | Users stop trusting the bot | Calibrated fuse thresholds (70/60/25, ADR-005); false-positive gate ≤ 10% | 5% (1 of 20) on benign-but-suspicious samples |
+| Small, synthetic eval set | Metrics may be optimistic | Report limits openly; collect anonymised donated samples with consent | 134 labelled samples, **0 real anonymised samples**; target was 300 |
+| LLM error, throttling or quota | No answer | Backup model, then rules-only mode; the bot always replies | Implemented in the cascade |
+| Prompt injection inside forwarded text | Manipulated verdict | Bedrock Guardrails `PROMPT_ATTACK`; detected injection raises the minimum level to `UNSURE`; LLM output is rendered through templates only | Implemented |
+| Latency and cold start | Answer later than the 15 s target | Grouping on SQS; models preloaded during Lambda INIT; warm-up before the demo | Text p95 3.5 s (warm). **Image end-to-end p95 17.0 s, above 15 s**; accepted up to ~30 s by the AI lead. `ai` cold-start init p50 6.2 s |
+| Cost spike from spam | Budget overrun | Per-user rate limit, kill switch, SQS concurrency cap, DLQ alarm | AWS Budgets 50 USD/month, email alerts when actual spend passes 10, 25, 40 and 50 USD (the 10 and 25 USD levels were added on 25/11/2026 to match the diagram) |
+| Personal data and consent | Legal non-compliance | Explicit, recorded consent; withdraw and delete commands; PII masked before any external call; no original content stored; 30-day TTL. Designed against Law 91/2025/QH15 on Personal Data Protection (National Assembly) and Decree 356/2025/NĐ-CP (Government) – a design mapping, not legal advice | |
+| Bedrock model availability by region | Judge unavailable | Sydney has the models in-region; fallback to Jakarta (`ap-southeast-3`) or switching model only changes `ai/config/models.yaml` | Not needed so far |
+| Team capacity (exams, 4 people) | Missed milestones | Pairing, early scope cut (voice, VLM, multi-turn, Mini App), predefined cut order if late | Scope cut applied in v3 of the plan |

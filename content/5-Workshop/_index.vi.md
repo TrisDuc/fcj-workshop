@@ -1,36 +1,35 @@
 ---
-title : "Workshop"
-date : 2026-10-19
-weight : 5
-chapter : false
-pre : " <b> 5. </b> "
+title: "Workshop"
+date: 2026-11-25
+weight: 5
+chapter: false
+pre: " <b> 5. </b> "
 ---
-{{% notice info %}}
-**Lưu ý bản nháp:** Workshop này được viết trước khi dựng, dựa trên kiến trúc mục tiêu. Tên tài nguyên, phiên bản và nhãn trên console có thể hơi khác trong account của bạn — hãy điều chỉnh khi làm, và thay các bước dự kiến bằng những gì bạn thực sự đã chạy và quan sát.
-{{% /notice %}}
 
-# Xây dựng AskFirst: trợ lý Telegram serverless chống lừa đảo trên AWS
+# Ask First ("Hỏi Trước"): bot kiểm tra tin lừa đảo chạy serverless trên AWS
 
 #### Tổng quan
 
-**AskFirst** ("Hỏi Trước Khi Chuyển") cho phép người cao tuổi chuyển tiếp tin nhắn, ảnh chụp màn hình hoặc đường link đáng ngờ cho một bot Telegram và nhận kết luận rủi ro bằng ngôn ngữ dễ hiểu trước khi gửi tiền.
+**Ask First** là một Telegram bot giúp người cao tuổi kiểm tra tin nhắn đáng ngờ trước khi làm theo. Người dùng chuyển tiếp tin nhắn, đường link hoặc ảnh chụp màn hình cho bot. Sau vài giây, bot trả lời bằng tiếng Việt dễ hiểu: tin này rủi ro tới mức nào, giống kịch bản lừa đảo nào và nên làm gì tiếp theo. Nếu rủi ro cao, bot có thể báo cho người thân đã đồng ý nhận cảnh báo.
 
-Trong workshop này bạn sẽ dựng hệ thống từng bước:
+Toàn bộ hệ thống chạy serverless trên AWS:
 
-+ **Webhook Lambda (Java 21)** xác thực Telegram, loại update trùng, chặn media quá lớn và đưa việc vào hàng đợi.
-+ **Hàng đợi Amazon SQS kèm dead-letter queue**, thử lại job lỗi tối đa 5 lần.
-+ **Worker Lambda (Java 21)** gom tin nhắn của một người dùng trong cửa sổ 3 giây, gọi Lambda AI, trả lời, cảnh báo người thân và đặt lịch hỏi lại sau 15 phút.
-+ **Lambda AI (container Python)** chạy OCR, che dữ liệu cá nhân, truy xuất tri thức lừa đảo và đánh giá rủi ro bằng **Amazon Bedrock** và **Bedrock Guardrails**.
-+ **Bảo mật và vận hành**: IAM đặc quyền tối thiểu, SSM Parameter Store, KMS, triển khai GitHub Actions không dùng khóa, alarm CloudWatch, email SNS, CloudTrail và Budgets.
++ **AWS Lambda** (Java 21) nhận update từ Telegram qua **Function URL** (`webhook`) và xử lý job từ **Amazon SQS** (`worker`), có **dead-letter queue** cho job lỗi.
++ Lambda thứ ba là **`ai`**, đóng gói dạng **container image** (Python 3.12): chạy model OCR và embedding trên CPU, áp dụng luật và RAG, rồi gọi **Amazon Bedrock** (Qwen3 32B, dự phòng gpt-oss-120b) có **Bedrock Guardrails** đứng trước.
++ **Amazon DynamoDB** lưu metadata có TTL, **Amazon S3** lưu trọng số model và index của knowledge base, **SSM Parameter Store** giữ bot token và webhook secret, **Amazon CloudWatch** thu log và alarm cho DLQ.
++ Mọi tài nguyên được viết dưới dạng code bằng **AWS SAM** và deploy ở `ap-southeast-1` (Singapore); Bedrock được gọi ở `ap-southeast-2` (Sydney).
+
+Trong workshop này, bạn sẽ dựng lại đúng hệ thống đó trên tài khoản AWS của mình theo từng bước, và kết thúc với một bot chạy thật để nhắn tin trên Telegram.
 
 #### Nội dung
 
-1. [Tổng quan workshop](5.1-Workshop-overview/)
-2. [Chuẩn bị](5.2-Prerequiste/)
-3. [Nền tảng: DynamoDB và SQS](5.3-Foundation/)
-4. [Webhook Lambda cho Telegram](5.4-Webhook/)
-5. [Worker Lambda](5.5-Worker/)
-6. [Lambda AI với Amazon Bedrock](5.6-AI-Lambda/)
-7. [Bảo mật và vận hành](5.7-Security-Ops/)
-8. [Kiểm thử end-to-end](5.8-Testing/)
-9. [Dọn dẹp](5.9-Cleanup/)
+1. [Tổng quan](5.1-overview/)
+2. [Chuẩn bị](5.2-prerequisites/)
+3. [Deploy hạ tầng (SAM)](5.3-deploy-infrastructure/)
+4. [Deploy AI function](5.4-deploy-ai-function/)
+5. [Kết nối Telegram](5.5-connect-telegram/)
+6. [Kiểm thử và nghiệm thu](5.6-testing-validation/)
+7. [Giám sát](5.7-monitoring/)
+8. [Chi phí](5.8-cost/)
+9. [Dọn dẹp tài nguyên](5.9-cleanup/)
+10. [Demo và bài học kinh nghiệm](5.10-demo-lessons/)
