@@ -1,6 +1,6 @@
 ---
-title: "Blog 1 - Load Balancing và điểm nghẽn database"
-date: 2026-11-08
+title: "Blog 1 - Lambda + EventBridge: Kiến trúc hướng sự kiện để tự cập nhật dữ liệu hằng ngày"
+date: 2026-11-21
 weight: 1
 chapter: false
 pre: " <b> 3.1. </b> "
@@ -8,50 +8,61 @@ pre: " <b> 3.1. </b> "
 
 ### Thông tin bài đăng
 
-- **Tác giả:** Nguyễn Huỳnh Minh Nhật (tên hiển thị Facebook: Nhật Nguyễn).
-- **Ngày đăng:** 08/11/2026, lúc 22:18 theo ảnh bài đăng.
+- **Tác giả:** Võ Đức Trí (tên hiển thị Facebook: Trí Đức Võ).
+- **Ngày đăng:** 21/11/2026, lúc 23:21 theo ảnh bài đăng.
 - **Nơi đăng:** AWS Study Group VN trên Facebook.
-- **Bài gốc:** [Xem bài đăng trên Facebook](https://www.facebook.com/groups/awsstudygroupfcj/posts/2325121871586105).
+- **Bài gốc:** TBD — dán link bài đăng Facebook của bạn vào đây.
 
-### Amazon Load Balancing sinh ra để chia tải, nhưng nếu website vẫn chậm thì chuyện gì có thể đang diễn ra?
+### Lambda + EventBridge: Cách mình dùng Event-driven Architecture để tự cập nhật data hằng ngày
 
-**Bài toán:** Một website đăng ký sự kiện chạy trên hai EC2 phía sau Application Load Balancer (ALB), cùng truy vấn một Amazon RDS database. Khi mở đăng ký, lượng truy cập tăng vọt và trang cứ loading dù các target vẫn healthy. Phản xạ thường gặp là thêm EC2 để chia request cho nhiều máy hơn. Tuy nhiên, cách này hiệu quả khi tầng ứng dụng thực sự thiếu khả năng xử lý.
+**Bài toán:** Mỗi sáng tác giả mở bốn, năm tab để xem giá xăng, giá vàng, tỉ số esport và thời tiết. Mục tiêu là một trang duy nhất tự cập nhật, xây bằng AWS Lambda và Amazon EventBridge để mỗi phần chỉ phản ứng với sự kiện của riêng nó.
 
-{{< event-photo src="images/blogs/load-balancing/architecture.png" alt="Người dùng gửi request qua ALB tới hai EC2 cùng truy vấn một Amazon RDS database." caption="Sơ đồ tình huống minh họa trong bài: ALB, hai EC2 và một database RDS dùng chung." >}}
+#### Yêu cầu đặt ra
+- **Không chạy server 24/7:** chỉ tốn tài nguyên khi thật sự có việc.
+- **Mỗi nguồn một nhịp riêng:** thời tiết thay đổi trong ngày, tỉ số esport cần nhanh hơn vào giờ thi đấu, giá xăng điều chỉnh theo kỳ.
+- **Một nguồn lỗi không làm hỏng cả trang:** API giá vàng chết thì thời tiết vẫn phải hiện.
+- **Dễ thêm nguồn mới** và **chi phí cá nhân nhỏ.**
 
-#### Load balancing giúp gì?
+#### Event-driven ở đây nghĩa là gì?
+Một script lấy mọi thứ rồi dựng trang có thể bị ảnh hưởng chỉ vì một API chậm hoặc lỗi. Với thiết kế hướng sự kiện, sự kiện "đến giờ lấy giá vàng" gọi một Lambda, còn sự kiện "có dữ liệu mới trong kho" gọi một Lambda khác dựng lại trang. Hai phần không gọi trực tiếp nhau mà được EventBridge nối bằng sự kiện, nên mỗi phần có thể chạy, lỗi và thay đổi độc lập.
 
-ALB phân phối request tới các target. Khi health check đánh dấu một target unhealthy và còn target khỏe, request mới được chuyển tới các target khỏe. Kết hợp Auto Scaling, hệ thống có thể bổ sung EC2 khi tải tăng. Điều này hữu ích khi CPU hoặc bộ nhớ của tầng ứng dụng quá tải và công việc có thể phân chia giữa nhiều máy.
+{{< event-photo src="images/blogs/lambda-eventbridge/architecture.png" alt="EventBridge Scheduler gọi Lambda collector ghi vào S3; sự kiện S3 Object Created đi qua EventBridge rule tới Lambda renderer ghi trang vào S3, phân phối qua CloudFront." caption="Kiến trúc trong bài: Scheduler, Lambda collector, S3, EventBridge rule, Lambda renderer, S3 và CloudFront." >}}
 
-#### Khi database mới là điểm nghẽn
+#### Kiến trúc
+Website là các file HTML tĩnh trên Amazon S3, phân phối qua Amazon CloudFront.
 
-Nếu cả hai EC2 đang chờ RDS trả kết quả, thêm máy có thể chỉ tạo thêm các máy cùng đứng chờ. Mỗi EC2 mới còn có connection pool riêng. Ví dụ minh họa: mỗi máy giữ 20 kết nối, tăng từ 2 lên 6 EC2 làm tổng kết nối tăng từ 40 lên 120. Chi phí tăng trong khi áp lực lên database có thể lớn hơn.
+1. **EventBridge Scheduler** đóng vai trò đồng hồ. Mỗi nguồn có một schedule riêng và gửi payload JSON như `{"source": "gold"}`.
+2. **Lambda collector** lấy dữ liệu một nguồn, chuẩn hóa thành JSON gọn và ghi `data/<nguồn>.json` vào S3.
+3. **EventBridge rule** bắt sự kiện *Object Created* của S3 với prefix `data/`.
+4. **Lambda renderer** gộp các file JSON, dựng lại `index.html` và làm mới cache CloudFront.
 
-#### Healthy chưa phản ánh toàn bộ trải nghiệm
+#### Bước 1: Mỗi nguồn một nhịp với EventBridge Scheduler
+Scheduler gọi Lambda theo kiểu bất đồng bộ và hỗ trợ lịch một lần hoặc định kỳ bằng biểu thức `rate` hoặc `cron`. Vì mỗi schedule có thể gửi kèm payload riêng nên chỉ cần một hàm collector cho mọi nguồn. Scheduler cũng hỗ trợ múi giờ nên có thể đặt giờ Việt Nam. Các lịch dự kiến: thời tiết mỗi 3 giờ, giá xăng và vàng theo ngày hoặc tuần, tỉ số trận đấu mỗi 30 phút. Mỗi schedule cần một execution role; retry policy và dead-letter queue giúp các lần gọi thất bại không biến mất âm thầm.
 
-Health check thường chỉ cho thấy ứng dụng còn phản hồi, chưa chứng minh người dùng đăng ký thành công. Bài viết cũng lưu ý việc đưa truy vấn database vào `/health`: khi Auto Scaling sử dụng ELB health checks, database chậm có thể khiến nhiều EC2 bị thay thế; máy mới tiếp tục mở kết nối và làm tình trạng quá tải nặng thêm.
+#### Bước 2: Lambda collector
+Collector đọc tên nguồn từ payload, gọi API tương ứng có timeout, chuẩn hóa kết quả và ghi vào S3. Chuẩn hóa ngay tại đây giúp renderer không cần biết định dạng của từng nguồn. Một nguyên tắc được giữ: **nếu một nguồn lỗi, Lambda báo lỗi và không ghi đè file cũ**, nhờ vậy trang vẫn có dữ liệu lần trước thay vì bị trống. Với nguồn dữ liệu, ưu tiên API chính thức hoặc nguồn cho phép truy cập tự động, và đọc kỹ điều khoản sử dụng của từng nơi.
 
-Hướng xử lý được thảo luận là giữ health check nhẹ, đồng thời theo dõi trải nghiệm qua các metric như `TargetResponseTime` và `HTTPCode_Target_5XX_Count`.
+#### Bước 3: Sự kiện nối Collector với Renderer
+Collector ghi xong file là xong việc, không cần biết ai dùng file đó. S3 có thể gửi sự kiện của bucket sang EventBridge (bật trong mục Event notifications của bucket), và một EventBridge rule bắt sự kiện *Object Created* của bucket với prefix `data/`. Có hai điểm cần nhớ:
 
-#### Kiểm tra trước khi tăng máy
+- **Phải lọc prefix `data/`.** Renderer cũng ghi `index.html` vào cùng bucket. Nếu rule bắt mọi object mới thì lần ghi đó lại gọi renderer, tạo thành vòng lặp vô tận.
+- **S3 giao sự kiện kiểu at-least-once** nên có thể nhận sự kiện trùng. Renderer được thiết kế **idempotent**: luôn dựng lại trang từ dữ liệu hiện có và ghi đè, nên chạy hai lần cho cùng kết quả.
 
-- Nếu CPU EC2 cao, RDS phản hồi nhanh và số kết nối còn thấp, có thể tầng ứng dụng đang thiếu sức xử lý; bổ sung EC2 là hướng cần xem xét.
-- Nếu EC2 ít bận nhưng phản hồi chậm, cần kiểm tra thời gian chờ database, `DatabaseConnections`, `ReadLatency` và `WriteLatency`; xem lại query, index và connection pool.
-- RDS Proxy được đề cập như một cách quản lý, tái sử dụng kết nối tới database; query chậm vẫn cần tối ưu riêng.
+CloudFront cache nội dung ở edge nên renderer tạo invalidation cho `/index.html`. Mỗi mục trên trang hiển thị `updatedAt` của nguồn đó để dễ biết số liệu nào đang cũ.
 
-Mỗi lần chỉ nên thay đổi một yếu tố rồi chạy lại cùng kịch bản tải để so sánh. Thay đổi nhiều yếu tố cùng lúc làm khó xác định nguyên nhân cải thiện.
+#### Điểm rút ra
+- Các phần nhỏ, chạy độc lập: lỗi không lan, thêm nguồn mới chỉ là thêm một schedule và một hàm chuẩn hóa.
+- Điều thú vị không phải là viết một Lambda mà là cách các dịch vụ AWS kết nối thành một hệ thống hoàn chỉnh mà không cần server chạy liên tục.
 
-ALB chia request cho EC2, nhưng nếu nghẽn ở database thì thêm EC2 chưa chắc làm website nhanh hơn. **Bạn sẽ kiểm tra gì đầu tiên trong tình huống này?**
-
-Đây là tình huống giả định để phân tích kỹ thuật; các con số kết nối là ví dụ minh họa.
+Bạn kích hoạt Lambda bằng gì: lịch, sự kiện S3 hay thứ khác?
 
 ### Minh chứng bài đã đăng
 
-{{< event-photo src="images/blogs/load-balancing/facebook-publication.png" alt="Ảnh bài đăng của Nhật Nguyễn trong AWS Study Group VN, ngày 8 tháng 11 lúc 22:18." caption="Ảnh xác nhận bài Blog 1 đã đăng trên AWS Study Group VN do tác giả cung cấp." >}}
+{{< event-photo src="images/blogs/lambda-eventbridge/facebook-publication.png" alt="Ảnh bài đăng của Trí Đức Võ trong AWS Study Group VN, ngày 21 tháng 11 lúc 23:21." caption="Ảnh xác nhận bài Blog 1 đã đăng trên AWS Study Group VN do tác giả cung cấp." >}}
 
 ### Tài liệu tham khảo
 
-- [How Elastic Load Balancing works](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)
-- [Health checks for Application Load Balancer target groups](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html)
-- [CloudWatch metrics for Application Load Balancers](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-cloudwatch-metrics.html)
-- [Amazon RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html)
+- [Invoke a Lambda function on a schedule – AWS Lambda Developer Guide](https://docs.aws.amazon.com/lambda/latest/dg/with-eventbridge-scheduler.html)
+- [EventBridge Scheduler User Guide](https://docs.aws.amazon.com/scheduler/latest/UserGuide/what-is-scheduler.html)
+- [New – Use Amazon S3 Event Notifications with Amazon EventBridge – AWS News Blog](https://aws.amazon.com/blogs/aws/new-use-amazon-s3-event-notifications-with-amazon-eventbridge/)
+- Step-by-step guide to CloudFront invalidation in CodePipeline using Lambda – Medium
